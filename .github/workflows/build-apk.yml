@@ -3,10 +3,6 @@ name: Build AI Fotograaf PRO
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "*.zip"
-      - "**/*.zip"
-      - ".github/workflows/build-apk.yml"
 
 jobs:
   build:
@@ -22,45 +18,48 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Gradle
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
+      - name: Android SDK controleren
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la "$ANDROID_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version || true
+
       - name: ZIP uitpakken
-        shell: bash
         run: |
           set -e
           rm -rf project
           mkdir project
 
-          ZIP_FILE=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+          ZIP_FILE=$(find . -type f -iname "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
             echo "GEEN ZIP GEVONDEN"
             exit 1
           fi
 
-          echo "ZIP: $ZIP_FILE"
+          echo "ZIP GEVONDEN: $ZIP_FILE"
           unzip -q "$ZIP_FILE" -d project
 
       - name: Android project zoeken
-        shell: bash
         run: |
           set -e
 
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/project" -name settings.gradle -o -name settings.gradle.kts | head -n 1 | xargs -r dirname)
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/project" \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "GEEN ANDROID PROJECT GEVONDEN"
-            find "$GITHUB_WORKSPACE/project" -maxdepth 4 -type f
+            find project -maxdepth 5 -type f
             exit 1
           fi
 
-          echo "PROJECT: $PROJECT_DIR"
+          echo "ANDROID PROJECT: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: APK bouwen
@@ -69,16 +68,8 @@ jobs:
           gradle clean assembleDebug --stacktrace
 
       - name: APK controleren
-        shell: bash
         run: |
-          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name "*.apk" | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "APK NIET GEVONDEN"
-            exit 1
-          fi
-
-          echo "APK GEVONDEN: $APK"
+          find "$PROJECT_DIR/app/build/outputs" -type f -name "*.apk"
 
       - name: APK uploaden
         uses: actions/upload-artifact@v4
